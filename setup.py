@@ -22,7 +22,7 @@ def main():
         download_url="http://github.com/smcq/paisley/zipball/v0.3.1",
         packages = setuptools.find_packages (),
         package_data = {
-            '': ['*.template'],
+            'paisley.test': ['*.template', 'server.crt', 'server.key'],
             })
 
 if __name__ == "__main__":

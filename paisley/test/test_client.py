@@ -10,14 +10,16 @@ Test for couchdb client.
 
 from paisley import pjson as json
 
+import os
 import cgi
 
 from twisted.internet import defer
 
 from twisted.trial.unittest import TestCase
 from twisted.internet.defer import Deferred
-from twisted.internet import reactor
+from twisted.internet import reactor, ssl
 from twisted.web import resource, server
+from twisted.web.client import WebClientContextFactory
 from twisted.web._newclient import ResponseDone
 from twisted.python.failure import Failure
 
@@ -418,20 +420,32 @@ class ConnectedCouchDBTestCase(TestCase):
     Test C{CouchDB} with a real web server.
     """
 
-    def setUp(self):
+    def _connectToServer(self, protocol, clientContextFactory=None):
         """
         Create a web server and a client bound to it.
         """
+
         self.resource = FakeCouchDBResource()
         site = server.Site(self.resource)
-        port = reactor.listenTCP(0, site, interface="127.0.0.1")
-        self.addCleanup(port.stopListening)
-        self.client = client.CouchDB("127.0.0.1", port.getHost().port)
 
-    def test_createDB(self):
-        """
-        Test listDB.
-        """
+        if protocol == 'https':
+            ssl_key = os.path.join(os.path.dirname(__file__), 'server.key')
+            ssl_cert = os.path.join(os.path.dirname(__file__), 'server.crt')
+            serverContextFactory = ssl.DefaultOpenSSLContextFactory(ssl_key,
+                                                                    ssl_cert)
+            port = reactor.listenSSL(0, site, interface="127.0.0.1",
+                                     contextFactory=serverContextFactory)
+        else:
+            port = reactor.listenTCP(0, site, interface="127.0.0.1")
+        self.addCleanup(port.stopListening)
+
+        kwargs = {}
+        if clientContextFactory is not None:
+            kwargs['contextFactory'] = clientContextFactory
+        self.client = client.CouchDB("127.0.0.1", port.getHost().port,
+                                     protocol=protocol, **kwargs)
+
+    def _test_listDB(self):
         data = [u"mydb"]
         self.resource.result = json.dumps(data)
         d = self.client.listDB()
@@ -440,6 +454,27 @@ class ConnectedCouchDBTestCase(TestCase):
             self.assertEquals(result, data)
         d.addCallback(cb)
         return d
+
+    def test_listDB(self):
+        """
+        Test listDB.
+        """
+        self._connectToServer('http')
+        return self._test_listDB()
+
+    def test_listDB_over_SSL(self):
+        """
+        Test listDB over SSL.
+        """
+        self._connectToServer('https')
+        return self._test_listDB()
+
+    def test_listDB_over_SSL_with_clientContextFactory(self):
+        """
+        Test listDB over SSL with clientContextFactory.
+        """
+        self._connectToServer('https', WebClientContextFactory())
+        return self._test_listDB()
 
 
 class RealCouchDBTestCase(util.CouchDBTestCase):

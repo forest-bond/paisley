@@ -119,7 +119,7 @@ class CouchDB(object):
 
     def __init__(self, host, port=5984, dbName=None,
                  username=None, password=None, disable_log=False,
-                 version=(1, 0, 1)):
+                 version=(1, 0, 1), protocol='http', contextFactory=None):
         """
         Initialize the client for given host.
 
@@ -136,12 +136,19 @@ class CouchDB(object):
         from twisted.internet import reactor
         # t.w.c imports reactor
         from twisted.web.client import Agent
-        self.client = Agent(reactor)
+
+        agent_args = (reactor,)
+        if contextFactory is not None:
+            agent_args += (contextFactory,)
+
+        self.client = Agent(*agent_args)
         self.host = host
         self.port = int(port)
+        self.protocol = protocol
         self.username = username
-        self.password =password
-        self.url_template = "http://%s:%s%%s" % (self.host, self.port)
+        self.password = password
+        self.url_template = "%s://%s:%s%%s" % (self.protocol, self.host,
+                                               self.port)
         if dbName is not None:
             self.bindToDB(dbName)
 
